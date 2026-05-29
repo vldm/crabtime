@@ -34,7 +34,8 @@ use std::hash::Hasher;
 // =================
 
 /// Set to 'true' to enable debug prints.
-const DEBUG: bool = false;
+#[allow(unexpected_cfgs, reason="custom made config")]
+const DEBUG: bool = false || cfg!(crabtime_debug);
 
 const CRATE: &str = "crabtime";
 /// Module with utils functions in the generated project.
