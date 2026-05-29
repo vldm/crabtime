@@ -1191,6 +1191,29 @@ pub fn eval_function(
 }
 
 
+#[proc_macro]
+pub fn eval_function2(body: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    // SAFETY: Used to panic in case of error.
+    #[allow(clippy::unwrap_used)]
+    extract_first_group(body)
+        .and_then(|(attr, stream)| eval_function_impl(attr, stream))
+        .unwrap_or_compile_error()
+        .into()
+}
+
+fn extract_first_group(
+    body: proc_macro::TokenStream,
+) -> Result<(proc_macro::TokenStream, proc_macro::TokenStream)> {
+    let mut tokens = body.into_iter();
+    let Some(proc_macro::TokenTree::Group(group)) = tokens.next() else {
+        return Err(error!("Expected a group"));
+    };
+    let group = group.stream();
+    let stream = tokens.collect();
+    Ok((group, stream))
+}
+
+
 fn eval_function_impl(
     attr: proc_macro::TokenStream,
     item: proc_macro::TokenStream
@@ -1234,16 +1257,22 @@ fn eval_function_impl(
     })?;
     let output_code = parse_output(&output);
     let duration = format_duration(timer.elapsed());
-    let options_doc = format!("{options:#?}").replace("\n", "\n/// ");
+
+    let stats = format!("
+     # Compilation Stats
+     Start: {start_time}
+     Duration: {duration}
+     Cached: {was_cached}
+     Output Dir: {output_dir_str}
+     Macro Options: {options:#?}");
+
+    // Ide will filter regular comments, so keep doc comments for them.
+    // For regular rust - emit comments because expressions attributes are unstable.
+    let comment_prefix = if is_ide()? { "\n/// " } else { "\n//" };
+    let commented_stats = stats.replace('\n', comment_prefix);
+
     let macro_code = format!("
-        /// # Compilation Stats
-        /// Start: {start_time}
-        /// Duration: {duration}
-        /// Cached: {was_cached}
-        /// Output Dir: {output_dir_str}
-        /// Macro Options: {options_doc}
-        #[cfg(any())]
-        const _: () = ();
+        {commented_stats}
         {output_code}
     ");
 
@@ -1316,10 +1345,7 @@ fn function_impl(
 
     // Check if the expansion engine is Rust Analyzer. If so, we need to generate
     // a code which looks like a function to enable type hints.
-    let program_name = std::env::current_exe()?
-        .file_name()
-        .map_or_else(|| "unknown".into(), |s| s.to_string_lossy().into_owned());
-    let rust_analyzer_hints = if program_name.contains("rust-analyzer") {
+    let rust_analyzer_hints = if is_ide()? {
         quote! {
             mod __rust_analyzer_hints__ {
                 #[test]
@@ -1340,12 +1366,15 @@ fn function_impl(
     let inner_attrs = quote!{ #(#inner_attrs_vec)* };
     let mut out = quote! {
         {
-            #[crabtime::eval_function(#attr)]
-            fn #name() #output_tp {
-                #inner_attrs
-                #args_setup
-                #args_code
-                #input_str
+            // Curly braces can be used in context of statement and expression.
+            crabtime::eval_function2! {
+                {#attr}
+                fn #name() #output_tp {
+                    #inner_attrs
+                    #args_setup
+                    #args_code
+                    #input_str
+                }
             }
         }
     };
@@ -1389,4 +1418,13 @@ fn get_current_time() -> String {
     let minutes = (total_seconds / 60) % 60;
     let seconds = total_seconds % 60;
     format!("{hours:02}:{minutes:02}:{seconds:02} ({milliseconds:03})")
+}
+
+
+fn is_ide() -> Result<bool> {
+
+    Ok(std::env::current_exe()?
+        .file_name()
+        .map_or_else(|| "unknown".into(), |s| s.to_string_lossy().into_owned())
+        .contains("rust-analyzer"))
 }
