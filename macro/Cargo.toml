@@ -6,9 +6,10 @@ edition = { workspace = true }
 description = "Helper for the crabtime crate."
 keywords = ["macros"]
 license = "MIT OR Apache-2.0"
+rust-version = "1.88"
 
 [dependencies]
-proc-macro2 = { version = "1.0.101", features = ["span-locations"] }
+proc-macro2 = { version = "1.0.106", features = ["span-locations"] }
 quote = "1"
 syn = { version = "2", features = ["full"] }
 toml = "0.8"

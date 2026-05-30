@@ -1,9 +1,4 @@
-#![cfg_attr(nightly, feature(proc_macro_span))]
 #![cfg_attr(nightly, feature(proc_macro_diagnostic))]
-
-#![cfg_attr(not(nightly), allow(dead_code))]
-#![cfg_attr(not(nightly), allow(unused_macros))]
-#![cfg_attr(not(nightly), allow(unused_imports))]
 
 mod error;
 mod path;
@@ -69,7 +64,6 @@ impl TokenRange {
         Self { start, end }
     }
 
-    #[cfg(nightly)]
     fn span(&self) -> Span {
         let first_span = self.start.span();
         let last_span = self.end.span();
@@ -89,17 +83,12 @@ fn gen_prelude(include_token_stream_impl: bool, paths: &Paths) -> String {
     let workspace_path =
         format!("pub const WORKSPACE_PATH: &str = r#\"{}\"#;", paths.workspace.display());
 
-    #[cfg(nightly)]
     let crate_config_path =
         format!("pub const CRATE_CONFIG_PATH: &str = r#\"{}\"#;", paths.crate_config.display());
-    #[cfg(not(nightly))]
-    let crate_config_path = "";
 
-    #[cfg(nightly)]
     let call_site_file_path =
         format!("pub const CALL_SITE_FILE_PATH: &str = r#\"{}\"#;", paths.call_site_file.display());
-    #[cfg(not(nightly))]
-    let call_site_file_path = "";
+
 
     format!("
         #[allow(unused_macros)]
@@ -308,9 +297,7 @@ const PRELUDE_ADDONS: &str = "
 struct Paths {
     workspace: PathBuf,
     output_dir: PathBuf,
-    #[cfg(nightly)]
     call_site_file: PathBuf,
-    #[cfg(nightly)]
     crate_config: PathBuf,
     // Whether we should remove `output_dir` after usage.
     one_shot_output_dir: bool,
@@ -319,7 +306,6 @@ struct Paths {
 }
 
 impl Paths {
-    #[cfg(nightly)]
     fn new(options: MacroOptions, macro_name: &str, input_str: &str) -> Result<Self> {
         let name = if options.content_base_name {
             Self::project_name_from_input(input_str)
@@ -346,16 +332,6 @@ impl Paths {
         Ok(out)
     }
 
-    #[cfg(not(nightly))]
-    fn new(options: MacroOptions, _macro_name: &str, input_str: &str) -> Result<Self> {
-        let name = Self::project_name_from_input(input_str);
-        let output_dir = Self::get_output_root()?.join(&name);
-        let target = path::find_parent(&output_dir, "target")?;
-        let workspace = path::parent(target)?.to_path_buf();
-        let cargo_toml_path = None;
-        let one_shot_output_dir = false;
-        Ok(Self { workspace, output_dir, cargo_toml_path, one_shot_output_dir }.init(options))
-    }
 
     fn init(mut self, options: MacroOptions) -> Self {
         // We cache projects on nightly by default. On stable, the project name is based on the
@@ -372,7 +348,6 @@ impl Paths {
         self
     }
 
-    #[cfg(nightly)]
     fn get_call_site_rel() -> PathBuf {
         // Sometimes `proc_macro::Span::call_site()` returns a relative path, sometimes an absolute
         // one. In the latter case, we need to discover the relative part from the project root.
@@ -488,7 +463,6 @@ impl Dependency {
         format!("{} = {}", self.label, self.tokens_str)
     }
 
-    #[cfg(nightly)]
     fn span(&self) -> Span {
         self.token_range.as_ref().map_or(Span::call_site(), |t| t.span())
     }
